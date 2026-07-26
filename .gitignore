@@ -1,0 +1,67 @@
+# ── macOS ─────────────────────────────────────────────
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# ── 에디터 / 임시 파일 ──────────────────────────────────
+*.swp
+*.swo
+*.swn
+*~
+.idea/
+.vscode/
+*.bak
+*.orig
+
+# ── Go ────────────────────────────────────────────────
+# 컴파일 결과물
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+# 커버리지
+coverage.out
+coverage.html
+# 작업 디렉터리 파일 (go work)
+go.work
+go.work.sum
+# 빌드 산출물 (Go 바이너리는 확장자가 없어 이름으로 지정)
+/bin/
+/dist/
+/cldpi
+/cldpi-server
+/cldpifs
+
+# ── cldpi 런타임 데이터 ─────────────────────────────────
+# 서버 CAS 저장소 · 클라이언트 캐시
+/data/
+blobs/
+cache/
+# SQLite 메타데이터
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# ── 인증서 / 키 (절대 커밋 금지) ────────────────────────
+*.pem
+*.key
+*.crt
+*.csr
+*.p12
+*.pfx
+secrets/
+.env
+.env.*
+
+# ── 로그 ──────────────────────────────────────────────
+*.log
+logs/
+
+# ── FUSE 마운트 포인트 ──────────────────────────────────
+/mnt/
