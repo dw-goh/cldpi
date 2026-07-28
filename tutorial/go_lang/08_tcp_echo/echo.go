@@ -18,6 +18,9 @@ package echo
 
 import (
 	"net"
+        "fmt"
+        "bufio"
+        "strings"
 )
 
 // 문제 1 — 클라이언트: 한 번 보내고 한 번 받기
@@ -38,7 +41,18 @@ import (
 // 에러는 감싸서 반환하세요 (5장): fmt.Errorf("dial %s: %w", addr, err)
 func Echo(addr, msg string) (string, error) {
 	// TODO
-	return "", nil
+        conn, err := net.Dial("tcp", addr)
+        if err != nil { return "", fmt.Errorf("dial %s: %w", addr, err) }
+        defer conn.Close()
+        
+        if _, err := fmt.Fprintf(conn, "%s\n", msg); err != nil {
+            return "", fmt.Errorf("write: %w", err)
+        }
+
+        line, err := bufio.NewReader(conn).ReadString('\n')
+        if err != nil { return "", fmt.Errorf("read: %w", err) }
+        
+        return strings.TrimRight(line, "\r\n"), nil
 }
 
 // 문제 2 — 연결 재사용
@@ -57,7 +71,26 @@ func Echo(addr, msg string) (string, error) {
 // 이게 바이트 스트림을 다룰 때 가장 자주 나오는 실수입니다.
 func EchoMany(addr string, msgs []string) ([]string, error) {
 	// TODO
-	return nil, nil
+        conn, err := net.Dial("tcp", addr)
+        if err != nil { return nil, fmt.Errorf("dial %s: %w", addr, err) }
+        defer conn.Close()
+
+        // ReadString 했을 때 더 이상 데이터가 없으면 어떤 것을 반환하는지?
+        r := bufio.NewReader(conn)
+        
+        out := make([]string, 0, len(msgs))
+        for _, msg := range msgs {
+            if _, err := fmt.Fprintf(conn, "%s\n", msg); err != nil {
+                return nil, fmt.Errorf("write %q: %w", msg, err)
+            }
+            line, err := r.ReadString('\n')
+            if err != nil {
+                return nil, fmt.Errorf("read reply for %q: %w", msg, err)
+            }
+            out = append(out, strings.TrimRight(line, "\r\n"))
+        }
+
+	return out, nil
 }
 
 // 문제 3 — 서버: 연결 하나 처리하기
@@ -79,6 +112,13 @@ func EchoMany(addr string, msgs []string) ([]string, error) {
 // M1에서 길이 접두사 프레이밍을 만드는 이유 중 하나이기도 합니다.
 func handleConn(c net.Conn) {
 	// TODO
+        defer c.Close()
+        sc := bufio.NewScanner(c)
+        for sc.Scan() { 
+            if _, err := fmt.Fprintf(c, "%s\n", sc.Text()); err != nil {
+                return
+            }
+        }
 }
 
 // 문제 4 — 서버: 접속 받기 ★
@@ -105,5 +145,11 @@ func handleConn(c net.Conn) {
 // 접속 하나 때문에 서버 프로세스 전체가 죽기 때문입니다 (5장 참고).
 func Serve(ln net.Listener) error {
 	// TODO
-	return nil
+        for {
+            conn, err := ln.Accept()
+            if err != nil {
+                return err
+            }
+            go handleConn(conn)
+        }
 }

@@ -30,6 +30,16 @@ import (
 // 그리고 WaitGroup은 절대 복사하면 안 됩니다 — 항상 &wg로 넘깁니다. go vet이 잡아줍니다.
 func RunAll(fns []func()) {
 	// TODO
+        var wg sync.WaitGroup
+        wg.Add(len(fns))
+        
+        for _, f := range fns {
+            go func() {
+                defer wg.Done()
+                f()
+            }()   
+        }
+        wg.Wait()
 }
 
 // SafeCounter는 여러 goroutine이 동시에 써도 안전한 카운터입니다.
@@ -56,11 +66,16 @@ type SafeCounter struct {
 // 값을 넘겨주는 흐름이면 채널, 상태를 보호하는 것이면 뮤텍스가 보통 더 간단합니다.
 func (c *SafeCounter) Inc() {
 	// TODO
+        c.mu.Lock()
+        defer c.mu.Unlock()
+        c.n++
 }
 
 func (c *SafeCounter) Value() int {
 	// TODO
-	return 0
+        c.mu.Lock()
+        defer c.mu.Unlock()
+	return c.n
 }
 
 // 문제 3 — select
@@ -79,7 +94,12 @@ func (c *SafeCounter) Value() int {
 // 아무것도 준비 안 됐으면 하나가 준비될 때까지 멈춥니다.
 func First(a, b <-chan string) string {
 	// TODO
-	return ""
+        select {
+        case v := <-a:
+            return v
+        case v := <-b:
+            return v
+        }
 }
 
 // 문제 4 — 타임아웃 ★
@@ -100,7 +120,12 @@ func First(a, b <-chan string) string {
 // (실제 네트워크 코드에서는 conn.SetReadDeadline이나 context를 더 자주 씁니다)
 func RecvTimeout(ch <-chan int, d time.Duration) (int, bool) {
 	// TODO
-	return 0, false
+        select {
+        case v := <-ch:
+            return v, true
+        case <- time.After(d):
+            return 0, false
+        }
 }
 
 // 문제 5 — 논블로킹 수신
@@ -120,7 +145,12 @@ func RecvTimeout(ch <-chan int, d time.Duration) (int, bool) {
 // 로그를 흘려보내되 버퍼가 차면 그냥 버리는 식으로 자주 씁니다.
 func TryRecv(ch <-chan int) (int, bool) {
 	// TODO
-	return 0, false
+        select {
+        case v := <-ch:
+            return v, true
+        default:
+            return 0, false
+        }
 }
 
 // 문제 6 — 팬인(fan-in)
@@ -139,7 +169,23 @@ func TryRecv(ch <-chan int) (int, bool) {
 // 해당 변수에 nil을 넣어 그 case를 영구히 꺼버리는 기법을 써야 합니다.
 func Merge(a, b <-chan int) <-chan int {
 	// TODO
-	return nil
+        var wg sync.WaitGroup
+        wg.Add(2)
+
+        ch := make(chan int)
+        go func() {
+            for v := range a { ch <- v }
+            wg.Done()
+        }()
+        go func() {
+            for v := range b { ch <- v }
+            wg.Done()
+        }()
+        go func() {
+            wg.Wait()
+            close(ch)
+        }()
+	return ch
 }
 
 // Registry는 id별로 응답을 기다리는 사람들을 관리합니다. ★★
@@ -159,8 +205,9 @@ type Registry struct {
 // waiters 맵을 초기화한 Registry를 반환하세요.
 // (nil 맵에 쓰면 panic이므로 반드시 make가 필요합니다)
 func NewRegistry() *Registry {
-	// TODO
-	return nil
+        return &Registry{
+            waiters: make(map[int]chan string),
+        }
 }
 
 // 문제 7 (계속) — Wait
@@ -172,7 +219,13 @@ func NewRegistry() *Registry {
 // 버퍼가 없으면 Deliver가 락을 잡은 채 멈춰서 전체가 굳을 수 있습니다.
 func (r *Registry) Wait(id int) <-chan string {
 	// TODO
-	return nil
+        ch := make(chan string, 1)
+        
+        r.mu.Lock()
+        defer r.mu.Unlock()
+        r.waiters[id] = ch
+
+	return ch
 }
 
 // 문제 7 (계속) — Deliver
@@ -186,6 +239,17 @@ func (r *Registry) Wait(id int) <-chan string {
 // 맵에서 꺼내고 지우는 것까지만 락 안에서 하고, 락을 푼 뒤에 보냅니다.
 // (락을 잡은 채로 멈출 수 있는 연산을 하는 건 데드락의 지름길입니다)
 func (r *Registry) Deliver(id int, msg string) bool {
-	// TODO
-	return false
+        r.mu.Lock()
+        ch, ok := r.waiters[id]
+        if ok {
+            delete(r.waiters, id)
+        }
+        r.mu.Unlock()
+
+        if !ok {
+            return false
+        }
+
+        ch <- msg
+        return true
 }
